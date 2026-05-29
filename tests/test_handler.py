@@ -164,3 +164,57 @@ class TestHandler(unittest.TestCase):
         mock_answer.assert_called_once_with("query_1234", "Cancelled")
         mock_edit.assert_called_once()
         self.assertIn("cancelled", mock_edit.call_args[0][2])
+
+    @patch("src.handler.smerio_client.get_user_profile")
+    @patch("src.handler.parser.get_parser")
+    @patch("src.handler.tg.download_file")
+    @patch("src.handler.tg.send_message")
+    def test_handle_photo_message_success_flow(self, mock_send, mock_download, mock_get_parser, mock_get_profile):
+        """Verify handler fetches profile, downloads photo bytes, calls parser with bytes, and posts confirmation."""
+        mock_get_profile.return_value = self.mock_profile
+        mock_download.return_value = b"fake_image_binary_data"
+        
+        mock_parser_instance = MagicMock()
+        mock_get_parser.return_value = mock_parser_instance
+        mock_parser_instance.parse.return_value = {
+            "amount": 42.50,
+            "currency": "USD",
+            "category": "Utilities",
+            "subcategory": "Electricity",
+            "type": "Expense",
+            "notes": "bill",
+            "account_id": None,
+            "confidence": 0.95,
+            "clarification_needed": False,
+            "friendly_message": "Yes, I will log $42.50 for electricity bill."
+        }
+        
+        photo_message = {
+            "from": {"id": 5139816564},
+            "chat": {"id": 12345},
+            "photo": [
+                {"file_id": "small_id", "file_size": 100},
+                {"file_id": "large_id", "file_size": 5000}
+            ],
+            "caption": "via card"
+        }
+        
+        handler._handle_message(photo_message)
+        
+        # Verify download and parsing calls
+        mock_download.assert_called_once_with("large_id") # Picked the largest photo size
+        mock_parser_instance.parse.assert_called_once_with(
+            "via card",
+            unittest.mock.ANY,
+            self.mock_profile,
+            image_bytes=b"fake_image_binary_data"
+        )
+        
+        # Verify Telegram response sent
+        mock_send.assert_any_call(
+            12345,
+            unittest.mock.ANY,
+            parse_mode="HTML",
+            reply_markup=unittest.mock.ANY
+        )
+

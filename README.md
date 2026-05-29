@@ -142,19 +142,21 @@ You should receive a successful confirmation:
 ## 📝 Usage Guide
 
 1. Open Telegram and search for your bot. Click **Start** or type `/start`.
-2. Send a transaction description in free-format plain text:
+2. **Text Transaction**: Send a transaction description in free-format plain text:
    > *spent 20$ on 2 cups of coffee in the starbucks*
-3. The bot will display a loading indicator and respond with the parsed classification details:
+3. **Photo Receipt**: Send a photo of a receipt or bill (optionally adding a text caption such as *"via Credit Card"* alongside the image):
+   > *[Send image of your coffee receipt] + caption: "via Credit Card"*
+4. The bot will automatically download the image, run multimodal AI parsing (OCR + category classification), and reply with a stateless confirmation card:
    > 📝 Yes, I am glad that you had 2 cups of coffee, I will add this as transaction - category Food, subcategory Cafe, amount 20, currency usd, is it right?
    > 
    > `[✅ Yes, log it]`  `[❌ No, cancel]`
-4. Tap **[Yes, log it]**:
+5. Tap **[Yes, log it]**:
    * The bot immediately logs the transaction into Smerio.
    * On success, the confirmation edits to:
      > Yes, I am glad that you had 2 cups of coffee...
      > 
      > ✅ **Logged successfully!**
-5. Tap **[No, cancel]**:
+6. Tap **[No, cancel]**:
    * The confirmation edits to:
      > Yes, I am glad that you had 2 cups of coffee...
      > 
@@ -179,4 +181,4 @@ Verify the code locally by running the comprehensive unit test suite:
           PYTHONPATH=src
    python3 -m unittest discover -s tests -v
    ```
-All 13 unit tests will pass successfully.
+All 14 unit tests will pass successfully.

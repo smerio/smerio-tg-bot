@@ -116,3 +116,37 @@ def answer_callback_query(callback_query_id: str, text: Optional[str] = None, sh
     except Exception as e:
         logger.exception("Failed to answer callback query")
         return False
+
+def download_file(file_id: str) -> Optional[bytes]:
+    """Download a file from Telegram servers in-memory."""
+    token = config.TELEGRAM_BOT_TOKEN
+    
+    try:
+        # Step 1: getFile to fetch file path
+        resp = requests.get(
+            _API.format(token=token, method="getFile"),
+            params={"file_id": file_id},
+            timeout=10
+        )
+        data = resp.json()
+        if not data.get("ok"):
+            logger.error("Telegram getFile failed: %s", data)
+            return None
+            
+        file_path = data["result"].get("file_path")
+        if not file_path:
+            logger.error("Telegram getFile returned success but missing file_path")
+            return None
+            
+        # Step 2: Download file bytes
+        file_url = f"https://api.telegram.org/file/bot{token}/{file_path}"
+        file_resp = requests.get(file_url, timeout=20)
+        if not file_resp.ok:
+            logger.error("Failed to download file from Telegram path: %s", file_path)
+            return None
+            
+        return file_resp.content
+    except Exception as e:
+        logger.exception("Failed to download file from Telegram")
+        return None
+

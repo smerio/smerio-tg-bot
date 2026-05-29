@@ -80,13 +80,31 @@ class GeminiParser:
         self.api_key = api_key
         self.url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.LLM_MODEL}:generateContent"
 
-    def parse(self, user_message: str, current_time: str, profile: dict) -> dict:
+    def parse(self, user_message: Optional[str], current_time: str, profile: dict, image_bytes: Optional[bytes] = None) -> dict:
         system_prompt = _build_system_prompt(profile)
+        
+        parts = []
+        if image_bytes:
+            import base64
+            b64_data = base64.b64encode(image_bytes).decode("utf-8")
+            parts.append({
+                "inlineData": {
+                    "mimeType": "image/jpeg",
+                    "data": b64_data
+                }
+            })
+            
+        user_prompt = f"current_time={current_time}\n"
+        if user_message:
+            user_prompt += f"user_message={user_message}\n"
+        user_prompt += "Analyze the receipt/bill image and extract the transaction details according to the custom taxonomy."
+        parts.append({"text": user_prompt})
+
         body = {
             "systemInstruction": {"parts": [{"text": system_prompt}]},
             "contents": [{
                 "role": "user",
-                "parts": [{"text": f"current_time={current_time}\nuser_message={user_message}"}],
+                "parts": parts,
             }],
             "generationConfig": {"responseMimeType": "application/json"},
         }
@@ -109,18 +127,36 @@ class OpenAIParser:
         self.api_key = api_key
         self.url = "https://api.openai.com/v1/chat/completions"
 
-    def parse(self, user_message: str, current_time: str, profile: dict) -> dict:
+    def parse(self, user_message: Optional[str], current_time: str, profile: dict, image_bytes: Optional[bytes] = None) -> dict:
         system_prompt = _build_system_prompt(profile)
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
+        
+        content_parts = []
+        if image_bytes:
+            import base64
+            b64_data = base64.b64encode(image_bytes).decode("utf-8")
+            content_parts.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{b64_data}"
+                }
+            })
+            
+        user_prompt = f"current_time={current_time}\n"
+        if user_message:
+            user_prompt += f"user_message={user_message}\n"
+        user_prompt += "Analyze the receipt/bill image and extract the transaction details according to the custom taxonomy."
+        content_parts.append({"type": "text", "text": user_prompt})
+
         body = {
             "model": config.LLM_MODEL,
             "response_format": {"type": "json_object"},
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"current_time={current_time}\nuser_message={user_message}"}
+                {"role": "user", "content": content_parts}
             ]
         }
         try:
@@ -142,13 +178,32 @@ class ClaudeParser:
         self.api_key = api_key
         self.url = "https://api.anthropic.com/v1/messages"
 
-    def parse(self, user_message: str, current_time: str, profile: dict) -> dict:
+    def parse(self, user_message: Optional[str], current_time: str, profile: dict, image_bytes: Optional[bytes] = None) -> dict:
         system_prompt = _build_system_prompt(profile)
         headers = {
             "x-api-key": self.api_key,
             "anthropic-version": "2023-06-01",
             "content-type": "application/json"
         }
+        
+        content_parts = []
+        if image_bytes:
+            import base64
+            b64_data = base64.b64encode(image_bytes).decode("utf-8")
+            content_parts.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/jpeg",
+                    "data": b64_data
+                }
+            })
+            
+        user_prompt = f"current_time={current_time}\n"
+        if user_message:
+            user_prompt += f"user_message={user_message}\n"
+        user_prompt += "Analyze the receipt/bill image and extract the transaction details according to the custom taxonomy."
+        content_parts.append({"type": "text", "text": user_prompt})
         
         # Guide Claude to strictly output JSON format
         prefill_prompt = "{"
@@ -157,7 +212,7 @@ class ClaudeParser:
             "max_tokens": 1024,
             "system": system_prompt,
             "messages": [
-                {"role": "user", "content": f"current_time={current_time}\nuser_message={user_message}"},
+                {"role": "user", "content": content_parts},
                 {"role": "assistant", "content": prefill_prompt}
             ]
         }

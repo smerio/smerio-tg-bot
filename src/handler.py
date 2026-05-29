@@ -91,23 +91,40 @@ def _route_update(update: dict) -> None:
         _handle_callback_query(callback_query)
 
 def _handle_message(message: dict) -> None:
-    """Handle incoming text messages."""
+    """Handle incoming text or photo messages."""
     chat_id = message.get("chat", {}).get("id")
     text = (message.get("text") or "").strip()
+    photo = message.get("photo")
+    caption = (message.get("caption") or "").strip()
     from_user_id = message.get("from", {}).get("id")
 
-    if not text or not chat_id:
+    if not chat_id:
         return
 
-    # Check for simple start/help commands
-    if text.lower() in ("/start", "/help"):
+    # Process receipt photo if present
+    image_bytes = None
+    if photo:
+        largest_photo = photo[-1]
+        file_id = largest_photo.get("file_id")
+        if file_id:
+            tg.send_message(chat_id, "📷 <i>Reading receipt photo...</i>")
+            image_bytes = tg.download_file(file_id)
+            if not image_bytes:
+                tg.send_message(chat_id, "❌ Failed to download receipt image from Telegram.")
+                return
+        text = caption
+    elif not text:
+        return
+
+    # Check for simple start/help commands (only for text messages)
+    if not photo and text.lower() in ("/start", "/help"):
         help_text = (
             "👋 <b>Welcome to the Smerio Telegram Bot!</b>\n\n"
-            "You can log transactions to Smerio by simply typing them in natural language.\n\n"
+            "You can log transactions to Smerio by simply typing them in natural language, or by **sending a photo of a receipt or bill**.\n\n"
             "<b>Examples:</b>\n"
             "• <i>'spent 20$ on 2 cups of coffee in the starbucks'</i>\n"
             "• <i>'salary 3000 USD from work'</i>\n"
-            "• <i>'spent 150 EUR for groceries at Lidl using debit card'</i>\n\n"
+            "• <i>[Send receipt photo] + caption: 'via Credit Card'</i>\n\n"
             "I will parse the transaction, map it to your Smerio accounts and categories, and ask for your confirmation before writing it to Smerio."
         )
         tg.send_message(chat_id, help_text)
@@ -129,7 +146,7 @@ def _handle_message(message: dict) -> None:
     # Call LLM parser
     current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     try:
-        parsed_tx = parser.get_parser().parse(text, current_time, profile)
+        parsed_tx = parser.get_parser().parse(text, current_time, profile, image_bytes=image_bytes)
     except Exception as e:
         logger.exception("LLM parsing error")
         tg.send_message(chat_id, f"❌ <b>AI Parser Error:</b> Failed to analyze message.\n\n<i>Details: {e}</i>")
