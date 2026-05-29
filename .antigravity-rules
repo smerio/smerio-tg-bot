@@ -1,0 +1,21 @@
+# Project Constitution
+
+## 1. Context & Memory
+- Always check the `./knowledge/` directory and `memory.md` before proposing solutions.
+- If `./knowledge/` contradicts `memory.md`, `memory.md` is the Source of Truth.
+- At the end of a session, always offer to sync new findings to the local knowledge base.
+
+## 2. Operations & Safety
+- Never delete files or large code blocks without confirmation.
+- Keep the project root clean; save all documentation to `./docs/` or `./knowledge/`.
+- If an agent task involves parallel work, check the file system for recent 'lock' files or status updates in `memory.md`.
+
+## 3. Technical Standards
+- Preferred Stack: [Insert your stack, e.g., Python/React/PostgreSQL].
+- Always include type hints and basic unit tests for core logic.
+- Use 'dry-run' mode (describing the plan) before executing complex multi-file changes.
+- Refer to `design.md` for all styling and interface decisions to ensure visual consistency.
+
+## 4. Communication
+- Be concise. Use technical language.
+- If a request is ambiguous, ask for clarification instead of guessing.

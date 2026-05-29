@@ -1,0 +1,25 @@
+# ===========================================================================
+# Smerio Telegram Bot Terraform Deployment Variables Example
+# Copy this file to 'terraform.tfvars' and insert your personal settings.
+# ===========================================================================
+
+# dynamic bot prefix to support multiple side-by-side installations (e.g., 'ivan-bot-1')
+bot_id = "bot1"
+
+# Target deployment region
+aws_region = "eu-central-1"
+
+# Zero-trust authorized Telegram User numeric ID
+allowed_telegram_user_id = 5139816564
+
+# Smerio Standalone WebApp Access Configuration
+smerio_api_url         = "https://budget.yourdomain.com"
+smerio_telegram_token  = "smerio_tg_your_secret_token_here"
+
+# Telegram Bot token (from @BotFather)
+telegram_bot_token     = "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
+
+# LLM Advisor & Classification Provider config
+# Options: 'gemini' (default), 'claude', 'openai'
+llm_provider = "gemini"
+llm_api_key  = "your_llm_api_key_here"
