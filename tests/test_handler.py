@@ -1,3 +1,12 @@
+import sys
+from unittest.mock import MagicMock
+# Dynamically mock boto3 if not present to support local unittest environment
+try:
+    import boto3
+except ImportError:
+    boto3_mock = MagicMock()
+    sys.modules["boto3"] = boto3_mock
+
 import unittest
 from unittest.mock import patch, MagicMock
 from src import handler, config, payload_utils

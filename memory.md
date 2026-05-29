@@ -47,6 +47,19 @@ To maintain an operating footprint of **absolute zero cost ($0.00)** and elimina
    * Initialized Git repository remote tracking, successfully pushed code and version release tags (`v1.0.0` - `v1.3.0`) over HTTPS to [github.com/smerio/smerio-tg-bot](https://github.com/smerio/smerio-tg-bot).
    * Created official GitHub Release **`v1.3.0 - Multimodal Receipt Parsing Support`** containing the latest updates.
 
+6. **Smart Subcategory Matching, Quoting, and Strict Non-Creation Rules**:
+   * Enhanced the LLM prompt to query global/unassigned subcategories under the empty string `""` key in `expense_subcategories` if no category-specific match is found (e.g., mapping `"groceries"` to the `"Продукты"` subcategory under the `"Food"` category).
+   * **Strict Matching & Non-Creation**: Formulated strict operational laws and guidelines that completely forbid the AI from generating, creating, or inventing new category or subcategory names.
+   * **Confused Clarification Trigger**: If a transaction cannot be mapped to the existing taxonomy without inventing a new name, the AI is strictly instructed to set `clarification_needed` to `true` and output a polite friendly message informing the user that it is confused and asking them to repeat the operation more clearly or specify the correct category/subcategory. No fallback categories (like `"Другое"`) or new names will be generated.
+   * Enabled robust cross-lingual semantic matching (e.g. mapping Russian `"корм животным"` to `"Животные"` and English `"groceries"` to `"Продукты"`).
+   * Enforced single quotes around resolved categories and subcategories in the final confirmation message using the format `'Category' -> 'Subcategory'` to avoid any ambiguity about whether new taxonomy items are being created.
+
+7. **Python 3.9 Compatibility & Local testing remediation**:
+   * Fixed Python 3.9 syntax incompatibilities by replacing all `|` union type hints with `Union` from `typing`.
+   * Delayed `boto3` loading inside `src/handler.py` to local scope so the app can start without the AWS SDK installed locally.
+   * Dynamically mocked `boto3` module in `tests/test_handler.py` to allow the unittest suite to succeed in any local environment.
+   * Verified all 15 unit tests pass cleanly.
+
 ---
 
 ## 🚀 Future Maintenance Commands
@@ -64,6 +77,7 @@ To prevent resource collisions in AWS, manage each bot explicitly by specifying 
 ---
 
 ## 📅 Next Steps
-1. **Webhook Registration**: Complete the webhook registration for Ivan's bot by executing the custom `curl` command with the newly generated `v1.3.1` release configuration parameters.
-2. **Side-by-Side Validation**: Test both bots concurrently to ensure stateless parsed responses remain isolated and correct.
-3. **Local Testing Setup**: Resolve the Python version incompatibility (typings for Python 3.9) inside `tests/` if local unit tests need to run in the local Pyenv environment.
+1. **Deployment**: Package and deploy the updated codebase to AWS Lambda for Ivan's and Olga's bots.
+2. **Webhook Registration**: Complete the webhook registration for Ivan's bot by executing the custom `curl` command with the latest parameters.
+3. **Side-by-Side Validation**: Test both bots concurrently to ensure stateless parsed responses remain isolated, correct, and properly quoted in real Telegram messages.
+

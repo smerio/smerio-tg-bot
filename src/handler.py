@@ -2,8 +2,6 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
-import boto3
-
 import config
 import telegram_utils as tg
 import smerio_client
@@ -66,6 +64,7 @@ def lambda_handler(event, context):
 
     # Self-invoke asynchronously using boto3
     try:
+        import boto3
         boto3.client("lambda").invoke(
             FunctionName=context.function_name,
             InvocationType="Event",

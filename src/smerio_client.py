@@ -1,4 +1,5 @@
 import requests
+from typing import Union
 import config
 
 class SmerioClientError(Exception):
@@ -16,7 +17,7 @@ def _get_headers() -> dict:
         "Accept": "application/json"
     }
 
-def get_user_profile(tg_user_id: int | str) -> dict:
+def get_user_profile(tg_user_id: Union[int, str]) -> dict:
     """Fetch Smerio profile context: categories, base currency, accounts.
     
     Endpoint: GET /api/telegram/user

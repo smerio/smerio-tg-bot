@@ -1,13 +1,13 @@
 import logging
 import requests
-from typing import Optional
+from typing import Optional, Union
 import config
 
 logger = logging.getLogger(__name__)
 
 _API = "https://api.telegram.org/bot{token}/{method}"
 
-def send_message(chat_id: int | str, text: str, parse_mode: str = "HTML", reply_markup: Optional[dict] = None) -> Optional[dict]:
+def send_message(chat_id: Union[int, str], text: str, parse_mode: str = "HTML", reply_markup: Optional[dict] = None) -> Optional[dict]:
     """Send a message to a Telegram chat.
     
     If HTML parsing fails, automatically retries in plain text to ensure delivery.
@@ -52,7 +52,7 @@ def send_message(chat_id: int | str, text: str, parse_mode: str = "HTML", reply_
         logger.exception("Failed to send message to Telegram")
         return None
 
-def edit_message(chat_id: int | str, message_id: int, text: str, parse_mode: str = "HTML", reply_markup: Optional[dict] = None) -> Optional[dict]:
+def edit_message(chat_id: Union[int, str], message_id: int, text: str, parse_mode: str = "HTML", reply_markup: Optional[dict] = None) -> Optional[dict]:
     """Edit an existing bot message."""
     token = config.TELEGRAM_BOT_TOKEN
     payload = {

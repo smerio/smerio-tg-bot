@@ -2,7 +2,7 @@ import os
 import json
 import logging
 import requests
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 import config
 
 logger = logging.getLogger(__name__)
@@ -23,20 +23,32 @@ You must return a JSON object with the following fields:
 {{
   "amount": positive float representing the transaction cost or proceed,
   "currency": 3-letter currency code (e.g. "USD", "EUR", "RUB"). If not specified, default to the user's base currency: {base_currency},
-  "category": Level 1 category. Try your best to match one of the user's custom categories listed above. If no match is found, assign a logical, clean category name,
-  "subcategory": Level 2 subcategory. Try to match the subcategories under the resolved category. If no subcategories match or exist, use a clean, logical name or null,
+  "category": Level 1 category. You MUST strictly select one of the user's custom categories listed in `Expense Categories` (or `Income Categories`) above. You are ABSOLUTELY PROHIBITED from inventing or creating new category names. If no category matches or can be reasonably mapped, you must set `clarification_needed` to true and output a helpful message asking the user to retry or specify the category,
+  "subcategory": Level 2 subcategory. You MUST strictly select one of the subcategories from the custom taxonomy lists. You are ABSOLUTELY PROHIBITED from creating or inventing a new subcategory name. Follow these matching rules:
+    1. First, search for a semantic or direct match in the subcategories listed under the resolved category inside the custom taxonomy.
+    2. If no matching subcategory is found under that specific category, check the global/unassigned subcategories list under the empty string key "" in the `Expense Subcategories (by category)` dictionary (e.g., if user mentions 'groceries' or Russian 'продукты' and the resolved category is 'Food' which only has 'Restaraunt', look under the empty string "" list and match it to 'Продукты').
+    3. Perform cross-lingual semantic matching (e.g., user inputs in Russian like 'корм животным' should map to 'Животные', and English 'groceries' should map to 'Продукты' if they are present in the list).
+    4. If no subcategory matches or exists anywhere in the custom lists, you are ABSOLUTELY PROHIBITED from inventing one or using standard fallbacks like 'Другое'. Instead, you MUST set `clarification_needed` to true, set `confidence` to a low value (e.g. 0.0), and use `friendly_message` to politely inform the user that the transaction details could not be matched to their existing budget taxonomy and ask them to repeat the operation more clearly or specify the correct category/subcategory. Never output empty string or null when a valid subcategory can be resolved,
   "type": strictly either "Expense" or "Income",
   "notes": very brief notes/details (e.g. merchant name, item description). Keep notes slim as requested! CRITICAL: If a payment method, bank name, or account is mentioned in the user's text (e.g., 'paid via Debit Card', 'using credit card', 'via Cash'), append it to the notes field in parentheses (e.g., 'Starbucks 2 cups of coffee (via Debit Card)'),
   "account_id": pocketbase ID of the matching account from the Smerio accounts list above (e.g., matching 'debit' to a Debit Card account ID). If no account matches or is mentioned, output null,
   "date": the transaction timestamp in "YYYY-MM-DD HH:MM:SS" format. If a relative date is used (e.g. "yesterday at 3pm"), calculate the correct absolute time using the current_time supplied. If no date/time is specified, output null (do NOT guess and do NOT ask for it),
   "confidence": float from 0.0 to 1.0 showing your confidence in the parse,
-  "clarification_needed": boolean. Set to true ONLY if the message is completely non-financial (e.g., greetings like 'hello', questions like 'what is my budget?'), or if the transaction amount is completely missing (e.g., 'I bought coffee' with no price). If an amount is present, set clarification_needed to false and do NOT ask for details,
+  "clarification_needed": boolean. Set to true if:
+    - The message is completely non-financial (e.g., greetings like 'hello', questions like 'what is my budget?'), OR
+    - The transaction amount is completely missing (e.g., 'I bought coffee' with no price), OR
+    - The transaction cannot be matched to any of the user's existing categories/subcategories without inventing or creating a new category/subcategory name,
   "friendly_message": A warm, natural, and helpful confirmation reply. 
-    - If clarification_needed is false: Confirm the details politely. For example: "Yes, I am glad that you had 2 cups of coffee, I will add this as transaction - category Food, subcategory Cafe, amount 20, currency usd, is it right?"
-    - If clarification_needed is true: Politley ask the user to clarify or supply the missing details. For example: "I see you spent money at Starbucks, but could you please specify how much it cost?"
+    - If clarification_needed is false: Confirm the details politely. To prevent any confusion and make it completely clear what Smerio envelopes are being used, you MUST explicitly include and quote the selected category and subcategory using single quotes, formatted as `'Category' -> 'Subcategory'`. Do NOT use generic English descriptive terms (like 'animal feed' or 'grocery purchase') as category or subcategory names.
+      * Example: "Got it! I'll record a 2442 RSD expense for animal feed under 'Home & Pets' -> 'Животные' category. Does that look right?"
+      * Example: "Got it! I've recorded your grocery purchase of 2000 RSD under the 'Food' -> 'Продукты' category. Is that correct?"
+    - If clarification_needed is true because a category/subcategory couldn't be matched: Politely inform the user that you are confused and ask them to repeat the operation more clearly or specify which existing category/subcategory it belongs to.
+      * Example: "Hmm, I couldn't match that transaction to any of your existing budget categories or subcategories. Could you please repeat the transaction more clearly or specify the correct category?"
+    - If clarification_needed is true because amount is missing or non-financial: Politely ask the user to clarify or supply the missing details. For example: "I see you spent money at Starbucks, but could you please specify how much it cost?"
 }}
 
 === OPERATIONAL LAWS ===
+- STRICT CATEGORY & SUBCATEGORY ADHERENCE: You are ABSOLUTELY PROHIBITED from creating, generating, or inventing new category or subcategory names. You MUST strictly select from the existing lists provided in the custom taxonomy. Every category has subcategories, and you must always resolve a valid subcategory from the taxonomy (either from the category-specific list or from the empty string key "" global list). If a transaction cannot be matched without inventing a new name, you MUST set clarification_needed to true and confidence to 0.0, and politely ask the user to clarify or repeat the transaction.
 - NEVER ask clarifying questions or require user inputs for missing accounts, payment cards, or dates/times if an amount is present. Proceed with high confidence and let the Smerio app handle backend defaults.
 - Truncate and clean notes. Keep them very concise.
 - Output ONLY the raw JSON block. Do NOT surround in markdown code blocks like ```json ... ```. No conversational prose outside the JSON.
@@ -230,7 +242,7 @@ class ClaudeParser:
 # ---------------------------------------------------------------------------
 # LLM Parser Factory
 # ---------------------------------------------------------------------------
-def get_parser() -> GeminiParser | OpenAIParser | ClaudeParser:
+def get_parser() -> Union[GeminiParser, OpenAIParser, ClaudeParser]:
     provider = config.LLM_PROVIDER
     key = config.LLM_API_KEY
     

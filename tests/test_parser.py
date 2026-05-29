@@ -63,3 +63,25 @@ class TestParser(unittest.TestCase):
         self.assertEqual(result["account_id"], "acc_1")
         self.assertFalse(result["clarification_needed"])
         self.assertEqual(result["friendly_message"], "Log expense?")
+
+    def test_build_system_prompt_with_unassigned_subcategories(self):
+        """Verify prompt contains rules for unassigned subcategories under empty key."""
+        profile_with_global = {
+            "base_currency": "USD",
+            "categories": {
+                "expense_categories": ["Food", "Home & Pets"],
+                "expense_subcategories": {
+                    "": ["Продукты", "Животные"],
+                    "Food": ["Restaraunt"],
+                    "Home & Pets": ["Животные"]
+                },
+                "income_categories": [],
+                "income_subcategories": []
+            },
+            "accounts": []
+        }
+        prompt = parser._build_system_prompt(profile_with_global)
+        self.assertIn("Животные", prompt)
+        self.assertIn("Продукты", prompt)
+        self.assertIn('""', prompt)
+
