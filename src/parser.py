@@ -26,18 +26,18 @@ You must return a JSON object with the following fields:
   "category": Level 1 category. Try your best to match one of the user's custom categories listed above. If no match is found, assign a logical, clean category name,
   "subcategory": Level 2 subcategory. Try to match the subcategories under the resolved category. If no subcategories match or exist, use a clean, logical name or null,
   "type": strictly either "Expense" or "Income",
-  "notes": very brief notes/details (e.g. merchant name, item description). Keep notes slim as requested!,
-  "account_id": pocketbase ID of the matching account from the Smerio accounts list above (e.g., matching "debit" to a Debit Card account ID). If no account is mentioned or matched, output null,
-  "date": the transaction timestamp in "YYYY-MM-DD HH:MM:SS" format. If a relative date is used (e.g. "yesterday at 3pm"), calculate the correct absolute time using the current_time supplied. If no date/time is specified, output null (do NOT guess),
+  "notes": very brief notes/details (e.g. merchant name, item description). Keep notes slim as requested! CRITICAL: If a payment method, bank name, or account is mentioned in the user's text (e.g., 'paid via Debit Card', 'using credit card', 'via Cash'), append it to the notes field in parentheses (e.g., 'Starbucks 2 cups of coffee (via Debit Card)'),
+  "account_id": pocketbase ID of the matching account from the Smerio accounts list above (e.g., matching 'debit' to a Debit Card account ID). If no account matches or is mentioned, output null,
+  "date": the transaction timestamp in "YYYY-MM-DD HH:MM:SS" format. If a relative date is used (e.g. "yesterday at 3pm"), calculate the correct absolute time using the current_time supplied. If no date/time is specified, output null (do NOT guess and do NOT ask for it),
   "confidence": float from 0.0 to 1.0 showing your confidence in the parse,
-  "clarification_needed": boolean. Set to true if the message is ambiguous, missing numbers/amounts, or if confidence is below 0.7,
+  "clarification_needed": boolean. Set to true ONLY if the message is completely non-financial (e.g., greetings like 'hello', questions like 'what is my budget?'), or if the transaction amount is completely missing (e.g., 'I bought coffee' with no price). If an amount is present, set clarification_needed to false and do NOT ask for details,
   "friendly_message": A warm, natural, and helpful confirmation reply. 
     - If clarification_needed is false: Confirm the details politely. For example: "Yes, I am glad that you had 2 cups of coffee, I will add this as transaction - category Food, subcategory Cafe, amount 20, currency usd, is it right?"
-    - If clarification_needed is true: Politley ask the user to clarify or supply the missing details. For example: "I see you spent money at Starbucks, but could you please specify how much it cost and which card you paid with?"
+    - If clarification_needed is true: Politley ask the user to clarify or supply the missing details. For example: "I see you spent money at Starbucks, but could you please specify how much it cost?"
 }}
 
 === OPERATIONAL LAWS ===
-- NEVER invent values. If a field is missing, set it to null or default as specified and lower your confidence.
+- NEVER ask clarifying questions or require user inputs for missing accounts, payment cards, or dates/times if an amount is present. Proceed with high confidence and let the Smerio app handle backend defaults.
 - Truncate and clean notes. Keep them very concise.
 - Output ONLY the raw JSON block. Do NOT surround in markdown code blocks like ```json ... ```. No conversational prose outside the JSON.
 """
