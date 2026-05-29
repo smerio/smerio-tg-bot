@@ -78,7 +78,7 @@ class LLMParserError(Exception):
 class GeminiParser:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.LLM_MODEL}:generateContent"
 
     def parse(self, user_message: str, current_time: str, profile: dict) -> dict:
         system_prompt = _build_system_prompt(profile)
@@ -116,7 +116,7 @@ class OpenAIParser:
             "Content-Type": "application/json"
         }
         body = {
-            "model": "gpt-4o-mini",
+            "model": config.LLM_MODEL,
             "response_format": {"type": "json_object"},
             "messages": [
                 {"role": "system", "content": system_prompt},
@@ -153,7 +153,7 @@ class ClaudeParser:
         # Guide Claude to strictly output JSON format
         prefill_prompt = "{"
         body = {
-            "model": "claude-3-5-haiku-20241022",
+            "model": config.LLM_MODEL,
             "max_tokens": 1024,
             "system": system_prompt,
             "messages": [

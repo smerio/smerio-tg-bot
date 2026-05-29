@@ -47,3 +47,9 @@ variable "llm_api_key" {
   description = "The API key for the chosen LLM provider"
   sensitive   = true
 }
+
+variable "llm_model" {
+  type        = string
+  description = "The specific model identifier to use (e.g. 'claude-haiku-4-5-20251001', 'gemini-2.0-flash'). If omitted, dynamic defaults are used based on the provider."
+  default     = ""
+}

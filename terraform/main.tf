@@ -120,6 +120,7 @@ resource "aws_lambda_function" "bot" {
       SMERIO_TELEGRAM_TOKEN    = var.smerio_telegram_token
       LLM_PROVIDER             = var.llm_provider
       LLM_API_KEY              = var.llm_api_key
+      LLM_MODEL                = var.llm_model
     }
   }
 

@@ -39,3 +39,13 @@ if LLM_PROVIDER not in ("gemini", "claude", "openai"):
 LLM_API_KEY = os.environ.get("LLM_API_KEY")
 if not LLM_API_KEY:
     raise ValueError("Missing mandatory environment variable: LLM_API_KEY")
+
+LLM_MODEL = os.environ.get("LLM_MODEL")
+if not LLM_MODEL:
+    if LLM_PROVIDER == "gemini":
+        LLM_MODEL = "gemini-2.0-flash"
+    elif LLM_PROVIDER == "openai":
+        LLM_MODEL = "gpt-4o-mini"
+    elif LLM_PROVIDER == "claude":
+        LLM_MODEL = "claude-haiku-4-5-20251001"
+
