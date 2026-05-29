@@ -53,8 +53,8 @@ _override.tf
 _override.tf.json
 .terraformrc
 terraform.rc
-terraform.tfvars
-terraform.tfvars.json
+*.tfvars
+*.tfvars.json
 
 # Local files
 smerio_bot.db

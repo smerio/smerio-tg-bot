@@ -74,57 +74,56 @@ Because AWS Lambda requires packaged dependencies for python runtimes, we create
 ---
 
 ### Step 5: Configure and Deploy via Terraform
+
 1. Navigate to the `terraform` folder:
    ```bash
    cd terraform
    ```
-2. Copy the template variables file to the active configuration file:
-   ```bash
-   cp terraform.tfvars.example terraform.tfvars
-   ```
-3. Open `terraform.tfvars` in your preferred editor and fill in your details:
-   ```hcl
-   # A unique identifier to isolate resource names (e.g. 'ivan-bot-1')
-   bot_id = "bot1"
-
-   # Target deployment region
-   aws_region = "eu-central-1"
-
-   # Your numeric Telegram user ID from Step 2
-   allowed_telegram_user_id = 5139816564
-
-   # The public base URL of Smerio and the Secret Gateway Token from Step 3
-   smerio_api_url         = "https://smerio.yourdomain.com"
-   smerio_telegram_token  = "smerio_tg_secret_gateway_token_here"
-
-   # Telegram Bot token from Step 1
-   telegram_bot_token     = "123456789:ABCdefGh..."
-
-   # LLM Provider ('gemini', 'claude', or 'openai') and your API Key
-   llm_provider = "gemini"
-   llm_api_key  = "your_llm_api_key_here"
-   ```
-4. Initialize Terraform:
+2. Initialize Terraform:
    ```bash
    terraform init
    ```
-5. Apply the infrastructure changes:
+
+Depending on your use case, choose one of the following deployment paths:
+
+#### Option A: Single Bot Deployment
+1. Copy the template variables file to the active configuration file:
+   ```bash
+   cp terraform.tfvars.example terraform.tfvars
+   ```
+2. Open `terraform.tfvars` in your editor and configure your settings.
+3. Deploy the resources:
    ```bash
    terraform apply
    ```
-6. Type `yes` and hit Enter to confirm. Once deployment completes, Terraform will output your final Webhook URL:
+
+#### Option B: Multi-Bot Side-by-Side isolated Deployment
+If you want to run multiple independent bots (e.g. one for yourself and one for your spouse) side-by-side inside the same AWS account without collision, use isolated configurations:
+1. Create a dedicated `.tfvars` file for each bot (e.g., `ivan.tfvars`, `olga.tfvars`) by copying `terraform.tfvars.example`.
+2. Configure each file with its own unique `bot_id`, `allowed_telegram_user_id`, `telegram_bot_token`, and API settings.
+3. Deploy each bot independently using isolated local state files:
    ```bash
-   Outputs:
-   webhook_url = "https://a1b2c3d4.execute-api.eu-central-1.amazonaws.com/webhook"
-   lambda_function_name = "smerio-bot-bot1"
+   # Deploy Ivan's bot
+   terraform apply -state=ivan.tfstate -var-file=ivan.tfvars
+   
+   # Deploy Olga's bot
+   terraform apply -state=olga.tfstate -var-file=olga.tfvars
    ```
-7. Copy the `webhook_url` value.
+
+Once the deployment completes, Terraform will output your final Webhook URL:
+```bash
+Outputs:
+webhook_url = "https://a1b2c3d4.execute-api.eu-central-1.amazonaws.com/webhook"
+lambda_function_name = "smerio-bot-bot1"
+```
+Copy the `webhook_url` value.
 
 ---
 
 ### Step 6: Link Your Telegram Bot to AWS
 Register the webhook URL with Telegram to ensure updates are routed to your Lambda function.
-Run the following `curl` command in your terminal, replacing `<TELEGRAM_BOT_TOKEN>` with the token from Step 1, and `<WEBHOOK_URL>` with the URL output by Terraform in Step 5:
+
+Run the following `curl` command in your terminal, replacing `<TELEGRAM_BOT_TOKEN>` with the token for the respective bot, and `<WEBHOOK_URL>` with the specific URL output by Terraform in Step 5:
 
 ```bash
 curl -F "url=<WEBHOOK_URL>" https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook
