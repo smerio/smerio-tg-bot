@@ -60,3 +60,10 @@ To prevent resource collisions in AWS, manage each bot explicitly by specifying 
   ```bash
   terraform apply -state=olga.tfstate -var-file=olga.tfvars
   ```
+
+---
+
+## 📅 Next Steps
+1. **Webhook Registration**: Complete the webhook registration for Ivan's bot by executing the custom `curl` command with the newly generated `v1.3.1` release configuration parameters.
+2. **Side-by-Side Validation**: Test both bots concurrently to ensure stateless parsed responses remain isolated and correct.
+3. **Local Testing Setup**: Resolve the Python version incompatibility (typings for Python 3.9) inside `tests/` if local unit tests need to run in the local Pyenv environment.
