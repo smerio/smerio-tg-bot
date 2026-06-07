@@ -12,6 +12,73 @@ import payload_utils
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+import re
+from typing import Optional
+
+def _find_exact_or_fuzzy_match(llm_val: Optional[str], valid_vals: list) -> Optional[str]:
+    """Finds an exact or substring match in valid_vals for llm_val."""
+    if not llm_val:
+        return None
+        
+    # 1. Exact match (case sensitive)
+    if llm_val in valid_vals:
+        return llm_val
+        
+    # 2. Case-insensitive exact match
+    llm_val_lower = llm_val.strip().lower()
+    for val in valid_vals:
+        if val.strip().lower() == llm_val_lower:
+            return val
+            
+    # 3. Fuzzy substring match (alphanumeric cleaning)
+    def clean_str(s: str) -> str:
+        # Lowercase and remove all non-alphanumeric characters
+        return re.sub(r'[^\w\s]', '', s.lower()).strip()
+        
+    llm_clean = clean_str(llm_val)
+    if not llm_clean:
+        return None
+        
+    for val in valid_vals:
+        val_clean = clean_str(val)
+        if not val_clean:
+            continue
+        # Check if one is a substring of the other (bidirectional)
+        if val_clean in llm_clean or llm_clean in val_clean:
+            return val
+            
+    return None
+
+def _safe_replace_value(msg: str, old_val: str, new_val: str) -> str:
+    """Safely replace category/subcategory name in friendly message to avoid partial-word replacement."""
+    if not old_val or not new_val or old_val == new_val:
+        return msg
+        
+    # Try common quoting patterns first
+    quotes = [
+        ("'", "'"),
+        ('"', '"'),
+        ("«", "»"),
+        ("“", "”"),
+        ("`", "`"),
+    ]
+    for q_start, q_end in quotes:
+        old_quoted = f"{q_start}{old_val}{q_end}"
+        if old_quoted in msg:
+            new_quoted = f"{q_start}{new_val}{q_end}"
+            return msg.replace(old_quoted, new_quoted)
+            
+    # Fallback to word-boundary-like replacement for cyrillic and latin
+    pattern = re.compile(rf"(?<!\w){re.escape(old_val)}(?!\w)")
+    if pattern.search(msg):
+        return pattern.sub(new_val, msg)
+        
+    # Ultimate fallback
+    if old_val in msg:
+        return msg.replace(old_val, new_val)
+        
+    return msg
+
 def lambda_handler(event, context):
     """AWS Lambda webhook entry point for Telegram.
     
@@ -154,6 +221,68 @@ def _handle_message(message: dict) -> None:
     clarification_needed = parsed_tx.get("clarification_needed", False)
     friendly_msg = parsed_tx.get("friendly_message", "Is this correct?")
     confidence = parsed_tx.get("confidence", 0.0)
+
+    # Programmatic Zero-Trust Taxonomy Validation Safeguard
+    if not clarification_needed:
+        category = parsed_tx.get("category")
+        subcategory = parsed_tx.get("subcategory")
+        tx_type = parsed_tx.get("type", "Expense")
+        
+        categories_ctx = profile.get("categories", {})
+        
+        valid = True
+        
+        # 1. Validate and Match Category
+        valid_categories = []
+        if tx_type == "Expense":
+            valid_categories = categories_ctx.get("expense_categories", [])
+        elif tx_type == "Income":
+            valid_categories = categories_ctx.get("income_categories", [])
+        else:
+            valid = False
+            
+        if valid:
+            matched_category = _find_exact_or_fuzzy_match(category, valid_categories)
+            if not matched_category:
+                valid = False
+            else:
+                if category != matched_category:
+                    logger.info("Fuzzy matched category: %r -> %r", category, matched_category)
+                    friendly_msg = _safe_replace_value(friendly_msg, category, matched_category)
+                    parsed_tx["category"] = matched_category
+                    category = matched_category
+                    
+        # 2. Validate and Match Subcategory
+        if valid and subcategory:
+            valid_subcategories = []
+            if tx_type == "Expense":
+                expense_subcategories = categories_ctx.get("expense_subcategories", {})
+                valid_subcategories = expense_subcategories.get(category, []) + expense_subcategories.get("", [])
+            elif tx_type == "Income":
+                valid_subcategories = categories_ctx.get("income_subcategories", [])
+                
+            matched_subcategory = _find_exact_or_fuzzy_match(subcategory, valid_subcategories)
+            if not matched_subcategory:
+                valid = False
+            else:
+                if subcategory != matched_subcategory:
+                    logger.info("Fuzzy matched subcategory: %r -> %r", subcategory, matched_subcategory)
+                    friendly_msg = _safe_replace_value(friendly_msg, subcategory, matched_subcategory)
+                    parsed_tx["subcategory"] = matched_subcategory
+                    subcategory = matched_subcategory
+                    
+        if not valid:
+            logger.warning(
+                "Programmatic taxonomy mismatch detected: type=%s, category=%r, subcategory=%r not in custom profile.",
+                tx_type, category, subcategory
+            )
+            clarification_needed = True
+            confidence = 0.0
+            friendly_msg = (
+                "Hmm, I couldn't match that transaction to any of your existing budget categories or subcategories. "
+                "Please repeat the transaction using an existing category/subcategory, or create the new "
+                "category/subcategory in Smerio first and then send the message again."
+            )
 
     if clarification_needed or confidence < 0.7:
         # LLM needs clarification or has low confidence: ask the user directly

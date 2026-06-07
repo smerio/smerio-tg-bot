@@ -51,14 +51,20 @@ To maintain an operating footprint of **absolute zero cost ($0.00)** and elimina
    * Enhanced the LLM prompt to query global/unassigned subcategories under the empty string `""` key in `expense_subcategories` if no category-specific match is found (e.g., mapping `"groceries"` to the `"Продукты"` subcategory under the `"Food"` category).
    * **Strict Matching & Non-Creation**: Formulated strict operational laws and guidelines that completely forbid the AI from generating, creating, or inventing new category or subcategory names.
    * **Confused Clarification Trigger**: If a transaction cannot be mapped to the existing taxonomy without inventing a new name, the AI is strictly instructed to set `clarification_needed` to `true` and output a polite friendly message informing the user that it is confused and asking them to repeat the operation more clearly or specify the correct category/subcategory. No fallback categories (like `"Другое"`) or new names will be generated.
+   * **Programmatic Zero-Trust Taxonomy Safeguard**: Implemented a programmatic validator inside `src/handler.py` that verifies the LLM-returned category and subcategory against the custom Smerio profile taxonomy before forwarding any transaction. If a hallucinated or non-existent category/subcategory is detected, the handler dynamically overrides `clarification_needed` to `True` and outputs the clarification flow (dropping inline confirmation buttons) to prevent backend database pollution.
+   * **Dynamic Role Prompting**: Replaced the hardcoded `"Ivan's personal finance bot"` inside the system prompt template with a dynamic `{username}'s` parameter, successfully customizing the AI role-adherence for Olga's bot (addressing her as `"Olya"`).
    * Enabled robust cross-lingual semantic matching (e.g. mapping Russian `"корм животным"` to `"Животные"` and English `"groceries"` to `"Продукты"`).
    * Enforced single quotes around resolved categories and subcategories in the final confirmation message using the format `'Category' -> 'Subcategory'` to avoid any ambiguity about whether new taxonomy items are being created.
+   * **Re-enforced strict taxonomy validation checks** in `src/handler.py` since Egor's and Olga's profile lists are now fully populated in Smerio.
 
-7. **Python 3.9 Compatibility & Local testing remediation**:
-   * Fixed Python 3.9 syntax incompatibilities by replacing all `|` union type hints with `Union` from `typing`.
-   * Delayed `boto3` loading inside `src/handler.py` to local scope so the app can start without the AWS SDK installed locally.
-   * Dynamically mocked `boto3` module in `tests/test_handler.py` to allow the unittest suite to succeed in any local environment.
-   * Verified all 15 unit tests pass cleanly.
+7. **System Prompt Generalization & Removing Hardcoded Bias**:
+   - Cleaned up all hardcoded taxonomy name assumptions (like forcing `'groceries'` to map specifically to `'Продукты'`) from `DEFAULT_SYSTEM_PROMPT_TEMPLATE` in `src/parser.py`.
+   - Generalized `src/prompts/smerio_ivan_bot.txt` by removing hardcoded Cyrillic category/subcategory strings from the cheatsheet and few-shot examples. The prompt now conceptualizes the mappings (e.g. `'Food · Grocery shopping category'` instead of `'Food · Groceries (Продукты)'`) to prevent biasing the LLM towards specific string representations.
+
+8. **Python local unit testing import duplication bug resolution**:
+   - Changed local unit tests to import directly from the top level (e.g., `import handler, config`) rather than `from src import ...`.
+   - This prevents Python's import system from creating two separate module instances in `sys.modules` (`config` vs `src.config`), resolving state and mock synchronization issues.
+   - All 19 tests pass cleanly.
 
 ---
 
@@ -73,11 +79,19 @@ To prevent resource collisions in AWS, manage each bot explicitly by specifying 
   ```bash
   terraform apply -state=olga.tfstate -var-file=olga.tfvars
   ```
+* **Manage Egor's Bot**:
+  ```bash
+  terraform apply -state=egor.tfstate -var-file=egor.tfvars
+  ```
+* **Manage Poly's Bot**:
+  ```bash
+  terraform apply -state=poly.tfstate -var-file=poly.tfvars
+  ```
 
 ---
 
 ## 📅 Next Steps
-1. **Deployment**: Package and deploy the updated codebase to AWS Lambda for Ivan's and Olga's bots.
-2. **Webhook Registration**: Complete the webhook registration for Ivan's bot by executing the custom `curl` command with the latest parameters.
-3. **Side-by-Side Validation**: Test both bots concurrently to ensure stateless parsed responses remain isolated, correct, and properly quoted in real Telegram messages.
+1. **Webhook Registration**: Complete the webhook registration for Egor's, Olga's, and Poly's bots by running the respective `curl` webhook commands with their specific tokens.
+2. **Multi-User Validation**: Send test transactions (e.g., `"Spent 300 rsd on tomatoes"`, `"Потратила 200 рублей на карандаши"`) from Olga's, Egor's, and Poly's Telegram accounts to verify dynamic, resilient categorization.
+
 

@@ -1,5 +1,5 @@
 import unittest
-from src import payload_utils
+import payload_utils
 
 class TestPayloadUtils(unittest.TestCase):
     def setUp(self):

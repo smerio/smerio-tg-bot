@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
-from src import smerio_client, config
+import smerio_client
+import config
 
 class TestSmerioClient(unittest.TestCase):
     @patch("requests.get")

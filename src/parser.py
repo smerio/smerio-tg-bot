@@ -7,8 +7,8 @@ import config
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT_TEMPLATE = """You are the AI parser inside Ivan's personal finance bot for Smerio.
-Your job is to parse a free-form transaction message from the user and match it against their custom Smerio profile context.
+DEFAULT_SYSTEM_PROMPT_TEMPLATE = """You are the AI parser inside {username}'s personal finance bot for Smerio.
+Your job is to parse a free-form transaction message from the user, extract the transaction values, and map it against their custom Smerio profile context.
 
 === SMERIO CUSTOM TAXONOMY & ACCOUNTS ===
 Base Currency: {base_currency}
@@ -23,12 +23,12 @@ You must return a JSON object with the following fields:
 {{
   "amount": positive float representing the transaction cost or proceed,
   "currency": 3-letter currency code (e.g. "USD", "EUR", "RUB"). If not specified, default to the user's base currency: {base_currency},
-  "category": Level 1 category. You MUST strictly select one of the user's custom categories listed in `Expense Categories` (or `Income Categories`) above. You are ABSOLUTELY PROHIBITED from inventing or creating new category names. If no category matches or can be reasonably mapped, you must set `clarification_needed` to true and output a helpful message asking the user to retry or specify the category,
-  "subcategory": Level 2 subcategory. You MUST strictly select one of the subcategories from the custom taxonomy lists. You are ABSOLUTELY PROHIBITED from creating or inventing a new subcategory name. Follow these matching rules:
+  "category": Level 1 category. You MUST strictly select one of the user's custom categories listed in `Expense Categories` (or `Income Categories`) above. You are ABSOLUTELY PROHIBITED from inventing or creating new category names. If no category matches or can be reasonably mapped, you must set `clarification_needed` to true and output a helpful message asking the user to retry with an existing category/subcategory or manually create it in Smerio first,
+  "subcategory": Level 2 subcategory. You MUST strictly select one of the subcategories from the custom taxonomy lists. You are ABSOLUTELY PROHIBITED from creating or inventing a new subcategory name if custom subcategories are provided. Follow these matching rules:
     1. First, search for a semantic or direct match in the subcategories listed under the resolved category inside the custom taxonomy.
-    2. If no matching subcategory is found under that specific category, check the global/unassigned subcategories list under the empty string key "" in the `Expense Subcategories (by category)` dictionary (e.g., if user mentions 'groceries' or Russian 'продукты' and the resolved category is 'Food' which only has 'Restaraunt', look under the empty string "" list and match it to 'Продукты').
-    3. Perform cross-lingual semantic matching (e.g., user inputs in Russian like 'корм животным' should map to 'Животные', and English 'groceries' should map to 'Продукты' if they are present in the list).
-    4. If no subcategory matches or exists anywhere in the custom lists, you are ABSOLUTELY PROHIBITED from inventing one or using standard fallbacks like 'Другое'. Instead, you MUST set `clarification_needed` to true, set `confidence` to a low value (e.g. 0.0), and use `friendly_message` to politely inform the user that the transaction details could not be matched to their existing budget taxonomy and ask them to repeat the operation more clearly or specify the correct category/subcategory. Never output empty string or null when a valid subcategory can be resolved,
+    2. If no matching subcategory is found under that specific category, check the global/unassigned subcategories list under the empty string key "" in the `Expense Subcategories (by category)` dictionary (e.g., check the global "" list and map it to a matching global subcategory name if present).
+    3. Perform cross-lingual semantic matching (e.g., user inputs in Russian should map to the corresponding Russian/English name in the list).
+    4. If no subcategory matches or exists anywhere in the custom lists, you are ABSOLUTELY PROHIBITED from inventing one or using standard fallbacks like 'Other' / 'Другое'. Instead, you MUST set `clarification_needed` to true, set `confidence` to a low value (e.g. 0.0), and use `friendly_message` to politely inform the user that the transaction details could not be matched to their existing budget taxonomy and ask them to repeat the transaction with an existing category/subcategory or manually create it in Smerio first. Never output empty string or null when a valid subcategory can be resolved,
   "type": strictly either "Expense" or "Income",
   "notes": very brief notes/details (e.g. merchant name, item description). Keep notes slim as requested! CRITICAL: If a payment method, bank name, or account is mentioned in the user's text (e.g., 'paid via Debit Card', 'using credit card', 'via Cash'), append it to the notes field in parentheses (e.g., 'Starbucks 2 cups of coffee (via Debit Card)'),
   "account_id": pocketbase ID of the matching account from the Smerio accounts list above (e.g., matching 'debit' to a Debit Card account ID). If no account matches or is mentioned, output null,
@@ -40,12 +40,17 @@ You must return a JSON object with the following fields:
     - The transaction cannot be matched to any of the user's existing categories/subcategories without inventing or creating a new category/subcategory name,
   "friendly_message": A warm, natural, and helpful confirmation reply. 
     - If clarification_needed is false: Confirm the details politely. To prevent any confusion and make it completely clear what Smerio envelopes are being used, you MUST explicitly include and quote the selected category and subcategory using single quotes, formatted as `'Category' -> 'Subcategory'`. Do NOT use generic English descriptive terms (like 'animal feed' or 'grocery purchase') as category or subcategory names.
-      * Example: "Got it! I'll record a 2442 RSD expense for animal feed under 'Home & Pets' -> 'Животные' category. Does that look right?"
-      * Example: "Got it! I've recorded your grocery purchase of 2000 RSD under the 'Food' -> 'Продукты' category. Is that correct?"
-    - If clarification_needed is true because a category/subcategory couldn't be matched: Politely inform the user that you are confused and ask them to repeat the operation more clearly or specify which existing category/subcategory it belongs to.
-      * Example: "Hmm, I couldn't match that transaction to any of your existing budget categories or subcategories. Could you please repeat the transaction more clearly or specify the correct category?"
+      * Example: "Got it! I'll record a 2442 RSD expense for animal feed under 'Home & Pets' -> 'Pets' category. Does that look right?"
+      * Example: "Got it! I've recorded your grocery purchase of 2000 RSD under the 'Food' -> 'Groceries' category. Is that correct?"
+    - If clarification_needed is true because a category/subcategory couldn't be matched: Politely inform the user that you couldn't match the transaction to their existing budget categories/subcategories. Explicitly instruct them to repeat the transaction using an existing category/subcategory, or manually create the category/subcategory in Smerio first and send the message again.
+      * Example: "Hmm, I couldn't match that transaction to any of your existing budget categories or subcategories. Please repeat the transaction using an existing category/subcategory, or create the new category/subcategory in Smerio first and then send the message again."
     - If clarification_needed is true because amount is missing or non-financial: Politely ask the user to clarify or supply the missing details. For example: "I see you spent money at Starbucks, but could you please specify how much it cost?"
 }}
+
+=== CATEGORIZATION & DISAMBIGUATION GUIDELINES ===
+- Try to match the transaction semantically to the user's custom category and subcategory lists.
+- Perform cross-lingual matching if the user inputs in another language (e.g., matching Russian to English category names, and vice versa).
+- Do not create or suggest new category/subcategory names. Use what is available in the lists.
 
 === OPERATIONAL LAWS ===
 - STRICT CATEGORY & SUBCATEGORY ADHERENCE: You are ABSOLUTELY PROHIBITED from creating, generating, or inventing new category or subcategory names. You MUST strictly select from the existing lists provided in the custom taxonomy. Every category has subcategories, and you must always resolve a valid subcategory from the taxonomy (either from the category-specific list or from the empty string key "" global list). If a transaction cannot be matched without inventing a new name, you MUST set clarification_needed to true and confidence to 0.0, and politely ask the user to clarify or repeat the transaction.
@@ -56,12 +61,29 @@ You must return a JSON object with the following fields:
 
 def _build_system_prompt(profile: dict) -> str:
     """Inject user-specific Smerio categories and accounts into the parser system prompt."""
+    import os
+    
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    prompts_dir = os.path.join(current_dir, "prompts")
+    custom_prompt_path = os.path.join(prompts_dir, f"{config.BOT_ID}.txt")
+    
+    if os.path.exists(custom_prompt_path):
+        try:
+            with open(custom_prompt_path, "r", encoding="utf-8") as f:
+                template = f.read()
+        except Exception as e:
+            logger.error(f"Failed to load custom prompt from %s: %s", custom_prompt_path, e)
+            template = DEFAULT_SYSTEM_PROMPT_TEMPLATE
+    else:
+        template = DEFAULT_SYSTEM_PROMPT_TEMPLATE
+
     categories = profile.get("categories", {})
     expense_categories = categories.get("expense_categories", [])
     expense_subcategories = categories.get("expense_subcategories", {})
     income_categories = categories.get("income_categories", [])
     income_subcategories = categories.get("income_subcategories", [])
     base_currency = profile.get("base_currency", "USD")
+    username = profile.get("username", "Ivan")
     
     # Format accounts into a concise list of names and IDs
     accounts = []
@@ -72,13 +94,14 @@ def _build_system_prompt(profile: dict) -> str:
             "currency": acc.get("currency")
         })
         
-    return SYSTEM_PROMPT_TEMPLATE.format(
+    return template.format(
+        username=username,
         base_currency=base_currency,
-        expense_categories=json.dumps(expense_categories),
-        expense_subcategories=json.dumps(expense_subcategories),
-        income_categories=json.dumps(income_categories),
-        income_subcategories=json.dumps(income_subcategories),
-        accounts=json.dumps(accounts)
+        expense_categories=json.dumps(expense_categories, ensure_ascii=False),
+        expense_subcategories=json.dumps(expense_subcategories, ensure_ascii=False),
+        income_categories=json.dumps(income_categories, ensure_ascii=False),
+        income_subcategories=json.dumps(income_subcategories, ensure_ascii=False),
+        accounts=json.dumps(accounts, ensure_ascii=False)
     )
 
 class LLMParserError(Exception):

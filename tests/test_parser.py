@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import patch, MagicMock
-from src import parser
+import parser
 
 class TestParser(unittest.TestCase):
     def setUp(self):

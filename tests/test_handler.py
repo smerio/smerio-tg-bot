@@ -9,13 +9,21 @@ except ImportError:
 
 import unittest
 from unittest.mock import patch, MagicMock
-from src import handler, config, payload_utils
+import handler
+import config
+import payload_utils
 
 class TestHandler(unittest.TestCase):
     def setUp(self):
         self.mock_profile = {
             "base_currency": "USD",
-            "categories": {"expense_categories": ["Food"]},
+            "categories": {
+                "expense_categories": ["Food", "Utilities"],
+                "expense_subcategories": {
+                    "Food": ["Cafe", "Groceries"],
+                    "Utilities": ["Electricity"]
+                }
+            },
             "accounts": []
         }
 
@@ -226,4 +234,122 @@ class TestHandler(unittest.TestCase):
             parse_mode="HTML",
             reply_markup=unittest.mock.ANY
         )
+
+    @patch("src.handler.smerio_client.get_user_profile")
+    @patch("src.handler.parser.get_parser")
+    @patch("src.handler.tg.send_message")
+    def test_handle_message_invalid_taxonomy_safeguard(self, mock_send, mock_get_parser, mock_get_profile):
+        """Verify that handle_message triggers clarification when the LLM returns an invalid category/subcategory."""
+        mock_get_profile.return_value = self.mock_profile
+        
+        mock_parser_instance = MagicMock()
+        mock_get_parser.return_value = mock_parser_instance
+        mock_parser_instance.parse.return_value = {
+            "amount": 20.0,
+            "currency": "USD",
+            "category": "InvalidCategoryName", # Hallucinated/invented by LLM
+            "subcategory": "Cafe",
+            "type": "Expense",
+            "notes": "coffee",
+            "account_id": None,
+            "confidence": 0.9,
+            "clarification_needed": False,
+            "friendly_message": "Yes, I will log $20 for coffee."
+        }
+        
+        message = {
+            "from": {"id": 5139816564},
+            "chat": {"id": 12345},
+            "text": "spent 20$ on coffee"
+        }
+        
+        handler._handle_message(message)
+        
+        # Verify it triggered clarification message instead of confirmation message with buttons
+        mock_send.assert_called_once()
+        args, kwargs = mock_send.call_args
+        self.assertEqual(args[0], 12345)
+        self.assertIn("Please repeat the transaction using an existing category/subcategory, or create the new category/subcategory in Smerio first", args[1])
+        # Confirm no inline keyboard buttons were sent
+        self.assertNotIn("reply_markup", kwargs)
+
+    @patch("src.handler.smerio_client.get_user_profile")
+    @patch("src.handler.parser.get_parser")
+    @patch("src.handler.tg.send_message")
+    def test_fuzzy_match_subcategory_success(self, mock_send, mock_get_parser, mock_get_profile):
+        """Verify that when the LLM returns 'Groceries (Продукты)' but profile has 'Groceries', it fuzzy matches."""
+        # Profile only has 'Groceries'
+        mock_get_profile.return_value = self.mock_profile
+        
+        mock_parser_instance = MagicMock()
+        mock_get_parser.return_value = mock_parser_instance
+        mock_parser_instance.parse.return_value = {
+            "amount": 40.0,
+            "currency": "USD",
+            "category": "Food",
+            "subcategory": "Groceries (Продукты)", # LLM returned bilingual name
+            "type": "Expense",
+            "notes": "groceries",
+            "account_id": None,
+            "confidence": 0.9,
+            "clarification_needed": False,
+            "friendly_message": "Got it! I will log $40 under 'Food' -> 'Groceries (Продукты)'."
+        }
+        
+        message = {
+            "from": {"id": 5139816564},
+            "chat": {"id": 12345},
+            "text": "groceries 40$"
+        }
+        
+        handler._handle_message(message)
+        
+        # Verify it mapped 'Groceries (Продукты)' -> 'Groceries' in friendly_message
+        mock_send.assert_called_once()
+        args, kwargs = mock_send.call_args
+        self.assertEqual(args[0], 12345)
+        # Check that the friendly message was modified to use 'Groceries' (exact taxonomy name)
+        self.assertIn("'Food' -> 'Groceries'", args[1])
+        self.assertNotIn("Groceries (Продукты)", args[1])
+        # Verify inline keyboard buttons were sent
+        self.assertIn("reply_markup", kwargs)
+        self.assertEqual(kwargs["reply_markup"]["inline_keyboard"][0][0]["text"], "✅ Yes, log it")
+
+    def test_fuzzy_match_helper(self):
+        """Test the exact/fuzzy matching helper function."""
+        # 1. Exact match
+        self.assertEqual(handler._find_exact_or_fuzzy_match("Cafe", ["Cafe", "Groceries"]), "Cafe")
+        # 2. Case insensitive
+        self.assertEqual(handler._find_exact_or_fuzzy_match("cafe", ["Cafe", "Groceries"]), "Cafe")
+        # 3. Substring (LLM has extra)
+        self.assertEqual(handler._find_exact_or_fuzzy_match("Groceries (Продукты)", ["Cafe", "Groceries"]), "Groceries")
+        # 4. Substring (Profile has extra)
+        self.assertEqual(handler._find_exact_or_fuzzy_match("Groceries", ["Cafe", "Groceries (Продукты)"]), "Groceries (Продукты)")
+        # 5. Non-matching
+        self.assertIsNone(handler._find_exact_or_fuzzy_match("Invalid", ["Cafe", "Groceries"]))
+
+    def test_safe_replace_value(self):
+        """Test the friendly message string replacement helper."""
+        # Single quotes replacement
+        self.assertEqual(
+            handler._safe_replace_value("under 'Food' -> 'Продукты' category", "Продукты", "Groceries (Продукты)"),
+            "under 'Food' -> 'Groceries (Продукты)' category"
+        )
+        # Cyrillic word boundaries
+        self.assertEqual(
+            handler._safe_replace_value("Это Дом для Дома.", "Дом", "Household (Дом)"),
+            "Это Household (Дом) для Дома."
+        )
+        # Double quotes replacement
+        self.assertEqual(
+            handler._safe_replace_value('under "Food" -> "Продукты"', "Продукты", "Groceries"),
+            'under "Food" -> "Groceries"'
+        )
+        # No quotes, simple boundary
+        self.assertEqual(
+            handler._safe_replace_value("Spent on food today", "food", "Food (Еда)"),
+            "Spent on Food (Еда) today"
+        )
+
+
 
